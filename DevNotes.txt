@@ -1,0 +1,31 @@
+Started off making the art for the game, map took way longer than it should've.
+
+Got the player sprite and animations from here: https://duckhive.itch.io/ducky-old
+which I really loved
+
+Once I had some assets, I created the unity 2D template and imported the assets. For now,
+the player will just be a freezeframe placeholder sliding around.
+
+When working with pixel art and importing it as png, it may be blurry by default. Along 
+with that scaling it up looks scuffed. That can be fixed on the image asset by:
+	- make sure the texture type is Sprite (2D and UI)
+	- change filter mode to Point (no filter)
+	- Change compression to None
+
+I decided to just jump straight into multiplayer movement rather than testing first... and 
+it wasn't so bad. A good chunk of it is based on https://www.youtube.com/watch?v=3yuBOB3VrCk
+	- Import Netcode and Multiplayer Tools
+	- Create NetworkManager as an empty gameobject
+	- Add the NetworkManager script to it (under Netcode assets)
+	- Set protocol type to unity transport
+
+To get a player working, it's gotta be a prefab with network object script on it
+	- Hierarchy will have no player, server/host will handle that
+	- Add the prefab to NetworkManager on both PlayerPrefab and Network Prefabs
+
+For movement (legacy rn), I started with client side movement with unity transport script on player.
+This works for host but not other clients. The issue with this is it's server authorative, so clients
+try to move but server snaps em back.
+
+TESTING: gotta build and run to test as seperate instances
+	- feel like it could be done using cmd but need to check later
