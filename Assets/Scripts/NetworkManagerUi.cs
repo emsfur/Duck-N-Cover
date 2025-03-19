@@ -10,9 +10,11 @@ public class NetworkManagerUi : MonoBehaviour
     [SerializeField] private Button clientButton;
 
     private void Awake() {
+
+        // use buttons for joining as host or client
         hostButton.onClick.AddListener(() => {
             NetworkManager.Singleton.StartHost();
-            gameObject.SetActive(false);
+            gameObject.SetActive(false); // hides buttons once pressed
         });
 
         clientButton.onClick.AddListener(() => {

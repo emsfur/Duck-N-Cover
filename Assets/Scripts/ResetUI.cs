@@ -14,15 +14,19 @@ public class ResetUI : NetworkBehaviour
     private void Awake()
     {
         resetButton.onClick.AddListener(() => {
+            // move player/tank back to spawn
             var playerObject = NetworkManager.Singleton.LocalClient.PlayerObject;
             var playerNetworkScript = playerObject.GetComponent<PlayerNetwork>();
             playerNetworkScript.ResetPlayer(); 
+
+            // hide any end ga,e UI components
             ResetScene();
         });
     }
 
     private void ResetScene()
     {
+        // find and toggle off end game ui components
         GameObject winScreen = GameObject.Find("Canvas/EndScreen/GameOverWin");
         GameObject loseScreen = GameObject.Find("Canvas/EndScreen/GameOverLose");
 

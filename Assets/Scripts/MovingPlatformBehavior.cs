@@ -19,10 +19,12 @@ public class MovingPlatformBehavior : NetworkBehaviour
     {
         if (!IsServer) return;
 
+        // if the platform was going up and hits the stopY value, then start going down
         if (transform.position.y > stopY && direction == 1)
         {
             direction *= -1;
         } 
+        // if the platform was going down and hits the startY value, then start going up
         else if (transform.position.y < startY && direction == -1)
         {
             direction *= -1;
@@ -38,6 +40,7 @@ public class MovingPlatformBehavior : NetworkBehaviour
         }
     }
 
+    // movement itself is handled by server
     [ServerRpc]
     void movePlatformDownServerRpc()
     {
