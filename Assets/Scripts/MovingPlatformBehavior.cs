@@ -1,57 +1,52 @@
-using System.Collections;
 using UnityEngine;
+using Unity.Netcode;
 
-public class MovingPlatformBehavior : MonoBehaviour
+public class MovingPlatformBehavior : NetworkBehaviour
 {
     public float moveSpeed = 2f;
-    public float waitTime = 3f;
-    public float[] stopHeights; // List of Y positions for stops
+    public float startY;
+    public float stopY;
 
-    private int currentStopIndex = 0;
     private int direction = 1; // 1 = Up, -1 = Down
-
+    private Rigidbody2D rb;
+    
     private void Start()
     {
-        if (stopHeights.Length < 2)
-        {
-            Debug.LogError("You need at least 2 stops for the platform to work!");
-            return;
-        }
-
-        StartCoroutine(MovePlatform());
+        rb = GetComponent<Rigidbody2D>();
     }
 
-    private IEnumerator MovePlatform()
+    private void Update()
     {
-        while (true)
+        if (!IsServer) return;
+
+        if (transform.position.y > stopY && direction == 1)
         {
-            // Get the target Y position
-            Vector3 targetPos = transform.position;
-            targetPos.y = stopHeights[currentStopIndex];
+            direction *= -1;
+        } 
+        else if (transform.position.y < startY && direction == -1)
+        {
+            direction *= -1;
+        }
 
-            // Move to the next stop
-            yield return StartCoroutine(MoveToPosition(targetPos));
-
-            // Wait at the stop
-            yield return new WaitForSeconds(waitTime);
-
-            // Update stop index
-            currentStopIndex += direction;
-
-            // Reverse direction at the top or bottom
-            if (currentStopIndex == stopHeights.Length - 1 || currentStopIndex == 0)
-            {
-                direction *= -1;
-            }
+        if (direction == 1)
+        {
+            movePlatformUpServerRpc();
+        }
+        else if (direction == -1)
+        {
+            movePlatformDownServerRpc();
         }
     }
 
-    private IEnumerator MoveToPosition(Vector3 target)
+    [ServerRpc]
+    void movePlatformDownServerRpc()
     {
-        while (Vector3.Distance(transform.position, target) > 0.01f)
-        {
-            transform.position = Vector3.MoveTowards(transform.position, target, moveSpeed * Time.deltaTime);
-            yield return null;
-        }
+        rb.velocity = new Vector2(rb.velocity.x, -moveSpeed);
+    }
+
+    [ServerRpc]
+    void movePlatformUpServerRpc()
+    {
+        rb.velocity = new Vector2(rb.velocity.x, moveSpeed);
     }
 }

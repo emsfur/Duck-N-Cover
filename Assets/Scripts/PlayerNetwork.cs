@@ -12,29 +12,20 @@ public class PlayerNetwork : NetworkBehaviour
     [SerializeField] private GameObject P1TankPrefab;
     [SerializeField] private GameObject P2TankPrefab;
     private GameObject playerTank;
-    private Rigidbody2D tankrb;
 
+    private Rigidbody2D tankrb;
     private GameObject duckTankOuter;
+
     private GameObject barrel;
     private GameObject emptyBarrel;
     private GameObject loadedBarrel;
 
-    /*
-    private GameObject tank;
-    public GameObject barrel;
-    [SerializeField] private GameObject missile;
-    [SerializeField] private Transform missileSpawnPoint;
+    private GameObject meterMask;
 
-    private int missilePowerLevel = 9;
-    [SerializeField] private GameObject meterMask;
-
+    [SerializeField] private GameObject missilePrefab;
     private GameObject missileInst;
-    private GameObject emptyBarrel;
-    private GameObject loadedBarrel;
-
-    private Rigidbody2D tankrb;
-    */
-    
+    private Transform missileSpawnPoint;
+    private int missilePowerLevel = 9;
 
     // these interactable variables are only to be kept locally, never modified/checked over server
     private bool nearDriverSeat = false;
@@ -44,10 +35,14 @@ public class PlayerNetwork : NetworkBehaviour
     private bool inShoot = false;
     private bool holdingAmmo = false;
 
-    /*
-    private float rotationSpeed = 0.8f;
     private int loadedAmmo = 0;
-    */
+
+    [SerializeField] private AudioSource barrelMoveSound;
+    [SerializeField] private AudioSource explosionSound;
+    [SerializeField] private AudioSource missileFireSound;
+    [SerializeField] private AudioSource tankMoveSound;
+    [SerializeField] private AudioSource missileLoadSound;
+
 
     public override void OnNetworkSpawn()
     {
@@ -60,15 +55,10 @@ public class PlayerNetwork : NetworkBehaviour
             SpawnPlayerTankServerRpc(OwnerClientId);
         }
 
-        if (IsOwner)
-        {
-            // Make sure the playerTank is ready before interacting with it
-            StartCoroutine(WaitForTankAndSetup());
-        }
-
         /*
         playerTank.transform.Find("DuckTankOuter")?.gameObject.SetActive(true);
         */
+        
     }
 
     [ServerRpc]
@@ -97,24 +87,22 @@ public class PlayerNetwork : NetworkBehaviour
 
         playerTank.transform.position = spawnPoint.transform.position;
         tankrb = playerTank.GetComponent<Rigidbody2D>();
-    }
 
-    // Wait for the tank to be fully set up before interacting with it
-    private IEnumerator WaitForTankAndSetup()
-    {
-        while (playerTank == null)
-        {
-            yield return null; // Wait until playerTank is assigned
-        }
-
-        // Once the tank is available, we can safely access it
         barrel = playerTank.transform.Find("Barrel")?.gameObject;
         emptyBarrel = barrel.transform.GetChild(0).gameObject;
         loadedBarrel = barrel.transform.GetChild(1).gameObject;
 
-        playerTank.transform.GetChild(0).gameObject.SetActive(false); // Set the DuckTankOuter inactive initially
+        meterMask = playerTank.transform.Find("PowerMeter/MeterLevelBG").gameObject;
+        missileSpawnPoint = playerTank.transform.Find("Barrel/SpawnPoint").transform;
+    }
 
-        // Additional setup if needed
+    [ServerRpc]
+    void ResetTankServerRpc(ulong clientId)
+    {
+        GameObject spawnPoint = clientId == 0 ? GameObject.Find("P1Spawn") : GameObject.Find("P2Spawn");
+        string tank = clientId == 0 ? "P1Tank(Clone)" : "P2Tank(Clone)";
+        playerTank.transform.position = spawnPoint.transform.position;
+        playerTank.GetComponent<TankHealthManager>().ResetHealth(tank);
     }
 
     void Start()
@@ -132,35 +120,30 @@ public class PlayerNetwork : NetworkBehaviour
     {
         if (!IsOwner) return;
 
-        if (Input.GetKeyDown(KeyCode.O) && nearDriverSeat) {
+        if (Input.GetKeyDown(KeyCode.O) && nearDriverSeat && !inCar) {
             inCar = true;
             EnterTankServerRpc();
         } 
         else if (Input.GetKeyDown(KeyCode.O) && inCar) {
             inCar = false;
             ExitTankServerRpc();
-        } 
-        /*
-        else if (Input.GetKeyDown(KeyCode.O) && nearShooter) {
+        }
+        else if (Input.GetKeyDown(KeyCode.O) && nearShooter && !inShoot) {
             inShoot = true;
-            rb.simulated = false; 
+            PlayerMovementServerRpc(false); // disable player movement
         } else if (Input.GetKeyDown(KeyCode.O) && inShoot) {
             inShoot = false;
-            rb.simulated = true; 
+            PlayerMovementServerRpc(true); // enable player movement
         }
-        
         if (Input.GetKeyDown(KeyCode.P) && nearAmmo) {
             holdingAmmo = true;
-            Debug.Log("Holding Ammo");
         } else if (Input.GetKeyDown(KeyCode.P) && nearShooter && holdingAmmo && loadedAmmo < 2) {
             holdingAmmo = false;
             loadedAmmo += 1;
-
-            emptyBarrel.SetActive(false);
-            loadedBarrel.SetActive(true);
+            missileLoadSound.Play();
+            //emptyBarrel.SetActive(false);
+            //loadedBarrel.SetActive(true);
         }
-
-        */
 
         // Movement handling
         float move = 0f;
@@ -169,33 +152,31 @@ public class PlayerNetwork : NetworkBehaviour
 
         if (inCar)
         {
+            if (!tankMoveSound.isPlaying && move != 0) 
+                tankMoveSound.Play();
+            else if (move == 0) 
+                tankMoveSound.Stop();
+
             MoveTankServerRpc(move);
+        }
+        else if (inShoot)
+        {
+            if (!barrelMoveSound.isPlaying && move != 0) 
+                barrelMoveSound.Play();
+            else if (move == 0) 
+                barrelMoveSound.Stop();
+            MoveBarrelServerRpc(move);
+            HandleShooting();
         }
         else {
             MovePlayerServerRpc(move); 
         }
-        /*
-        if (inCar) {
-            // Only move the tank
-            tankrb.velocity = new Vector2(move * moveSpeed, tankrb.velocity.y);
-        } else if (inShoot) {
-            // Debug.Log(barrel.transform.eulerAngles.z);
-            barrel.transform.Rotate(0, 0, rotationSpeed * -move);
+    }
 
-            if (barrel.transform.eulerAngles.z < 4) {
-                barrel.transform.Rotate(0, 0, rotationSpeed * -move);
-            } else if (barrel.transform.eulerAngles.z > 178) {
-                barrel.transform.Rotate(0, 0, rotationSpeed * move);
-            }
-
-            HandleShooting();
-
-        } else {
-            // Only move the player
-            rb.velocity = new Vector2(move * moveSpeed, rb.velocity.y);
-        }
-
-        */
+    [ServerRpc]
+    void PlayerMovementServerRpc(bool value)
+    {
+        rb.simulated = value;
     }
 
     [ServerRpc]
@@ -213,19 +194,33 @@ public class PlayerNetwork : NetworkBehaviour
     }
 
     [ServerRpc]
+    void MoveBarrelServerRpc(float move)
+    {
+        // 0.8f is hardcoded rotation speed
+        barrel.transform.Rotate(0, 0, 0.8f * -move);
+
+        // make sure barrel cant go below a certain angle (into the tank)
+        if (barrel.transform.eulerAngles.z < 4) {
+            barrel.transform.Rotate(0, 0, 0.8f * -move);
+        } else if (barrel.transform.eulerAngles.z > 178) {
+            barrel.transform.Rotate(0, 0, 0.8f * move);
+        }
+    }
+
+    [ServerRpc]
     void EnterTankServerRpc()
     {
-        rb.velocity = Vector2.zero;          // Stop player motion
-        rb.simulated = false;                // Disable player physics
-        transform.SetParent(playerTank.transform); // Lock to tank
-        transform.localPosition = Vector3.zero; // Ensure exact position
+        rb.velocity = Vector2.zero;
+        rb.simulated = false;
+        transform.SetParent(playerTank.transform);
+        transform.localPosition = Vector3.zero; 
     }
 
     [ServerRpc]
     void ExitTankServerRpc()
     {
-        transform.SetParent(null);           // Detach from tank
-        rb.simulated = true;                 // Re-enable physics
+        transform.SetParent(null);
+        rb.simulated = true;
     }
 
     void OnTriggerEnter2D(Collider2D collision)
@@ -250,26 +245,25 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
-    /*
     private void HandleShooting() {
         if (Input.GetKeyDown(KeyCode.W) && missilePowerLevel < 10) {
-            updateMeter(+1);
+            missilePowerLevel += 1;
+            UpdateMeterServerRpc(missilePowerLevel);
         } else if (Input.GetKeyDown(KeyCode.S) && missilePowerLevel > 1) {
-            updateMeter(-1);
+            missilePowerLevel -= 1;
+            UpdateMeterServerRpc(missilePowerLevel);
         }
 
         if (Input.GetKeyDown(KeyCode.Space) && loadedAmmo > 0) {
-            missileInst = Instantiate(missile, missileSpawnPoint.position, barrel.transform.rotation);
-
-            missileInst.GetComponent<MissileBehaviour>().SetBulletSpeed(missilePowerLevel);
+            ShootMissileServerRpc(missilePowerLevel);
             loadedAmmo -= 1;
+
+            missileFireSound.Play();
         }
     }
 
-    private void updateMeter(int delta) {
-        missilePowerLevel += delta;
-        Debug.Log("power level: " + missilePowerLevel);
-
+    [ServerRpc]
+    private void UpdateMeterServerRpc(float missilePowerLevel) {
         float scale = (10 - missilePowerLevel) * 0.03f;
         float yValue = -0.5f*scale + 0.085f;
         
@@ -285,5 +279,35 @@ public class PlayerNetwork : NetworkBehaviour
         newScale.y = scale;
         meterMask.transform.localScale = newScale;
     }
-    */
+
+    [ServerRpc]
+    private void ShootMissileServerRpc(float missilePowerLevel)
+    {
+        missileInst = Instantiate(missilePrefab, missileSpawnPoint.position, barrel.transform.rotation);
+        missileInst.GetComponent<MissileBehaviour>().SetBulletSpeed(missilePowerLevel);
+        missileInst.GetComponent<NetworkObject>().Spawn();
+        
+    }
+
+ 
+
+
+    public void ResetPlayer()
+    {
+        if (!IsOwner) return;
+
+        if (inCar)
+        {
+            ExitTankServerRpc();
+            inCar = false;
+        }
+        else if (inShoot)
+        {
+            inShoot = false;
+            PlayerMovementServerRpc(true);
+        }
+
+        SetPlayerSpawnServerRpc(OwnerClientId);
+        ResetTankServerRpc(OwnerClientId);
+    }
 }
